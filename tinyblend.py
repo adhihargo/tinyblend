@@ -205,7 +205,7 @@ class BlenderObject(object):
             return False
 
         eq = False
-        template = re.compile('(.+)_\d+_(\d+)')
+        template = re.compile(r'(.+)_\d+_(\d+)')
         name_iter = iter(self.FMT.names._fields)
         for name in name_iter:
             match = template.findall(name)
@@ -576,7 +576,7 @@ class BlenderFile(object):
         struct_name = type_names[struct.index]
         struct_fields = []
 
-        array_template = re.compile('\[(\d+)\]')
+        array_template = re.compile(r'\[(\d+)\]')
 
         for ftype, fname in struct.fields:
             name = field_names[fname]
