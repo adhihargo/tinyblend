@@ -640,16 +640,18 @@ class BlenderFile(object):
         field_names = [n.decode('utf-8') for n in data[offset + 4::].split(b'\x00', name_count)[:-1]]
 
         # Reading the blend file types
-        offset += sum((len(n) for n in field_names))+len(field_names)+4; align()         # Size of all names + size of all null char + name_count offset and Align the offset at 4 bytes
-        if data[offset:offset+4] != b'TYPE':
+        offset += sum((len(n) for n in field_names)) + len(field_names) + 4
+        align()  # Size of all names + size of all null char + name_count offset and Align the offset at 4 bytes
+        if data[offset:offset + 4] != b'TYPE':
             raise BlenderFileImportException('Malformed index')
 
         type_count = Int.unpack_from(data, offset + 4).val
         type_names = [n.decode('utf-8') for n in data[offset + 8::].split(b'\x00', type_count)[:-1]]
 
         # Reading the types length
-        offset += sum((len(t) for t in type_names))+len(type_names)+8; align()
-        if data[offset:offset+4] != b'TLEN':
+        offset += sum((len(t) for t in type_names)) + len(type_names) + 8
+        align()
+        if data[offset:offset + 4] != b'TLEN':
             raise BlenderFileImportException('Malformed index')
 
         offset += 4
@@ -657,8 +659,9 @@ class BlenderFile(object):
         type_sizes = (x.val for x in Short.iter_unpack(data[offset:offset + type_data_length]))
 
         # Reading structures information
-        offset += type_data_length; align()
-        if data[offset:offset+4] != b'STRC':
+        offset += type_data_length
+        align()
+        if data[offset:offset + 4] != b'STRC':
             raise BlenderFileImportException('Malformed index')
 
         offset += 8
@@ -722,7 +725,7 @@ class BlenderFile(object):
         if blend_index is None:
             raise BlenderFileImportException('Could not find blend file index')
 
-        if end_found == False:
+        if not end_found:
             raise BlenderFileImportException('End of the blend file was not found')
 
         return tuple(file_block_heads), blend_index
