@@ -783,20 +783,18 @@ class BlenderFile(object):
             :return:
         """
         version = self.header.version
-        factories = BlenderObjectFactory.CACHE.get(version)
+        factories: dict = BlenderObjectFactory.CACHE.get(version)
 
-        # If the factory was already created
-        fact = (factories.get(factory_name) or (lambda: None))()
-        if fact is not None:
-            return fact
-
-        # Factory creation
-        try:
-            fact = BlenderObjectFactory(self, self.index.type_names.index(factory_name))
-            factories[factory_name] = ref(fact)
-            return fact
-        except ValueError:
-            raise BlenderFileReadException('Data type {} could not be found in the blend file'.format(factory_name))
+        # Check if the factory was already created
+        fact = factories.get(factory_name, type(None))()
+        if fact is None:
+            # Factory creation
+            try:
+                fact = BlenderObjectFactory(self, self.index.type_names.index(factory_name))
+                factories[factory_name] = ref(fact)
+            except ValueError:
+                raise BlenderFileReadException('Data type {} could not be found in the blend file'.format(factory_name))
+        return fact
 
     def tree(self, type_name, recursive=True, max_level=999):
         """
