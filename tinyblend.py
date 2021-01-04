@@ -24,6 +24,7 @@
 import re
 from collections import namedtuple
 from enum import Enum
+from io import SEEK_CUR, SEEK_END, SEEK_SET
 from struct import Struct
 from weakref import ref
 
@@ -628,7 +629,7 @@ class BlenderFile(object):
         BlendStructFieldDNA = NamedStruct.from_namedtuple(BlenderFile.BlendStructFieldDNA, self._fmt_strct('hh'))
         BlendStructDNA = BlenderFile.BlendStructDNA
 
-        rewind_offset = self.handle.seek(0, 1)
+        rewind_offset = self.handle.seek(0, SEEK_CUR)
         data = self.handle.read(head.size)
         if data[0:8] != b'SDNANAME':
             raise BlenderFileImportException('Malformed index')
@@ -679,7 +680,7 @@ class BlenderFile(object):
             structures.append(BlendStructDNA(index=structure_type_index, fields=tuple(fields)))
 
         # Rewind the blend at the end of the block head
-        self.handle.seek(rewind_offset, 0)
+        self.handle.seek(rewind_offset, SEEK_SET)
 
         return BlenderFile.BlendIndex(
             field_names=tuple(field_names),
@@ -700,13 +701,13 @@ class BlenderFile(object):
         header_block_size = BlendBlockHeader.format.size
 
         # Get the blend file size
-        end = handle.seek(0, 2)
-        handle.seek(12, 0)
+        end = handle.seek(0, SEEK_END)
+        handle.seek(12, SEEK_SET)
 
         blend_index = None
         end_found = False
         file_block_heads = []
-        while end != handle.seek(0, 1) and not end_found:
+        while end != handle.seek(0, SEEK_CUR) and not end_found:
             buf = handle.read(header_block_size)
             file_block_head = BlendBlockHeader.unpack(buf)
 
@@ -717,9 +718,9 @@ class BlenderFile(object):
             elif file_block_head.code == b'ENDB':
                 end_found = True
             else:
-                file_block_heads.append((file_block_head, handle.seek(0, 1)))
+                file_block_heads.append((file_block_head, handle.seek(0, SEEK_CUR)))
 
-            handle.seek(file_block_head.size, 1)
+            handle.seek(file_block_head.size, SEEK_CUR)
 
         if blend_index is None:
             raise BlenderFileImportException('Could not find blend file index')
@@ -736,7 +737,7 @@ class BlenderFile(object):
             Author: Gabriel Dube
         """
         handle = self.handle
-        handle.seek(offset, 0)
+        handle.seek(offset, SEEK_SET)
         data = handle.read(block.size)
         return data
 
