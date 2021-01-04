@@ -184,29 +184,6 @@ class BlenderObject(object):
     # List of (subclasses, offset) in the object. Overriden is subclasses 
     CLASSES = None
 
-    @staticmethod
-    def _set_fields(names, data, obj):
-        """
-            Unpack the base types (float, int, etc) from the raw data to the object
-
-            author: Gabriel Dube
-        """
-        template = re.compile('(.+)_\d+_(\d+)')
-        gen = zip(names, data)
-        while True:
-            name, value = gen.__next__()
-            match = template.findall(name)
-            if len(match) == 0:
-                setattr(obj, name, value)
-            else:
-                field_name, array_len = match[0]
-                arr = [value]
-                for i in range(int(array_len)-1):
-                    _, value = gen.__next__()
-                    arr.append(value)
-                setattr(obj, field_name, tuple(arr))
-
-
     def __new__(cls, file, data):
         obj = super(BlenderObject, cls).__new__(cls)
         obj._file = file
@@ -243,6 +220,28 @@ class BlenderObject(object):
 
         return eq
 
+    @staticmethod
+    def _set_fields(names, data, obj):
+        """
+            Unpack the base types (float, int, etc) from the raw data to the object
+
+            author: Gabriel Dube
+        """
+        template = re.compile(r'(.+)_\d+_(\d+)')
+        gen = zip(names, data)
+        while True:
+            name, value = gen.__next__()
+            match = template.findall(name)
+            if len(match) == 0:
+                setattr(obj, name, value)
+            else:
+                field_name, array_len = match[0]
+                arr = [value]
+                for i in range(int(array_len) - 1):
+                    _, value = gen.__next__()
+                    arr.append(value)
+                setattr(obj, field_name, tuple(arr))
+
     @property
     def file(self):
         file = self._file()
@@ -272,6 +271,49 @@ class BlenderObjectFactory(object):
     """
     # Cache for instanced factories. Dict of {VERSION: {CLASS_NAME: CLASS}}
     CACHE = {}
+
+    def __init__(self, file, type_name_index):
+        self._file = ref(file)
+
+        for index, struct_dna in enumerate(file.index.structures):
+            if struct_dna.index == type_name_index:
+                self.struct_dna = struct_dna
+                self.sdna_index = index
+                break
+
+        dnafields = self.struct_dna.fields
+        dnatypes = file.index.type_names
+
+        # A type has a name if it has a ID type (always the first parameter)
+        self.has_name = 'ID' in (dnatypes[ftype] for ftype, fname in dnafields)
+
+        self.object, _ = BlenderObjectFactory._build_objects(file, self.struct_dna)
+        self.object_name = file.index.type_names[self.struct_dna.index]
+
+    def __len__(self):
+        file = self.file
+        blocks = file.blocks
+        count = 0
+
+        for block, offset in blocks:
+            count += block.sdna == self.sdna_index
+
+        return count
+
+    def __repr__(self):
+        file = self.file
+
+        dna = self.struct_dna
+        return "<BlenderObjectFactory for '{}' objects>".format(file.index.type_names[dna.index])
+
+    def __iter__(self):
+        file = self.file
+        blocks = file.blocks
+
+        for block, offset in blocks:
+            if block.sdna == self.sdna_index:
+                data = file._read_block(block, offset)
+                yield self.object(self._file, data)
 
     @staticmethod
     def compile_fmt(fields):
@@ -387,49 +429,6 @@ class BlenderObjectFactory(object):
 
         return obj, tuple(dependencies)
 
-    def __init__(self, file, type_name_index):
-        self._file = ref(file)
-
-        for index, struct_dna in enumerate(file.index.structures):
-            if struct_dna.index == type_name_index:
-                self.struct_dna = struct_dna
-                self.sdna_index = index
-                break
-
-        dnafields = self.struct_dna.fields
-        dnatypes = file.index.type_names
-
-        # A type has a name if it has a ID type (always the first parameter)
-        self.has_name = 'ID' in (dnatypes[ftype] for ftype, fname in dnafields)
-
-        self.object, _ = BlenderObjectFactory._build_objects(file, self.struct_dna)
-        self.object_name = file.index.type_names[self.struct_dna.index]
-        
-    def __len__(self):
-        file = self.file
-        blocks = file.blocks
-        count = 0
-
-        for block, offset in blocks:
-            count += block.sdna == self.sdna_index
-
-        return count
-
-    def __repr__(self):
-        file = self.file
-
-        dna = self.struct_dna
-        return "<BlenderObjectFactory for '{}' objects>".format(file.index.type_names[dna.index])
-
-    def __iter__(self):
-        file = self.file
-        blocks = file.blocks
-
-        for block, offset in blocks:
-            if block.sdna == self.sdna_index:
-                data = file._read_block(block, offset)
-                yield self.object(self._file, data)
-    
     @property
     def file(self):
         file = self._file()
@@ -484,6 +483,19 @@ class BlenderFile(object):
     BlendStructField = namedtuple('BlendStructField', ('name', 'type', 'size', 'ptr', 'count'))
     BlendStruct = namedtuple('BlendStruct', ('name', 'fields'))
     BlendIndex = namedtuple('BlendIndex', ('field_names', 'type_names', 'type_sizes', 'structures'))
+
+    def __init__(self, blend_file_name):
+        handle = self._get_file_handler(blend_file_name)
+        header = self._parse_header(handle.read(12))
+        if header is None:
+            raise BlenderFileImportException('Bad file header')
+
+        self.header = header
+        self.handle = handle
+        self.blocks, self.index = self._parse_blocks()
+
+        if BlenderObjectFactory.CACHE.get(header.version) is None:
+            BlenderObjectFactory.CACHE[header.version] = {}
 
     @staticmethod
     def _parse_header(header):
@@ -757,20 +769,6 @@ class BlenderFile(object):
     @staticmethod
     def _get_file_handler(path):
         return open(path, 'rb')
-
-    def __init__(self, blend_file_name):
-        handle = self._get_file_handler(blend_file_name)
-
-        header = BlenderFile._parse_header(handle.read(12))
-        if header is None:
-            raise BlenderFileImportException('Bad file header')
-
-        self.header = header
-        self.handle = handle
-        self.blocks, self.index = self._parse_blocks()
-
-        if BlenderObjectFactory.CACHE.get(header.version) is None:
-            BlenderObjectFactory.CACHE[header.version] = {}
 
     def list(self, factory_name):
         """
