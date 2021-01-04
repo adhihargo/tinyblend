@@ -50,7 +50,9 @@ Author: Gabriel Dube
 """
 
 # List of base types found in blend fields and their struct char representation.
-_BASE_TYPES = {'float':'f', 'double':'d', 'int':'i', 'short':'h', 'ushort': "H", 'char':'c', 'char': 'B', 'long': 'l', 'ulong': 'L', 'uint64_t':'Q', 'int64_t':'q'}
+_BASE_TYPES = {'float': 'f', 'double': 'd', 'int': 'i', 'short': 'h', 'ushort': "H", 'char': 'c', 'char': 'B',
+               'long': 'l', 'ulong': 'L', 'uint64_t': 'Q', 'int64_t': 'q'}
+
 
 class BlenderFileException(Exception):
     """
@@ -58,11 +60,13 @@ class BlenderFileException(Exception):
 
         author: Gabriel Dube
     """
+
     def __init__(self, message):
         self.message = message
 
     def __repr__(self):
         return "Error while executing action on blender file: {}".format(repr(self.message))
+
 
 class BlenderFileImportException(BlenderFileException):
     """
@@ -70,16 +74,20 @@ class BlenderFileImportException(BlenderFileException):
         
         author: Gabriel Dube
     """
+
     def __init__(self, message):
         super().__init__(message)
+
 
 class BlenderFileReadException(BlenderFileException):
     """
         Exception raised when reading bad values from a blend file
         author: Gabriel Dube
     """
+
     def __init__(self, message):
         super().__init__(message)
+
 
 class NamedStruct(object):
     """
@@ -87,6 +95,7 @@ class NamedStruct(object):
     """
 
     __fields__ = ('names', 'format')
+
     def __init__(self, name, fmt, *fields):
         self.format = Struct(fmt)
         self.names = namedtuple(name, fields)
@@ -117,6 +126,7 @@ class NamedStruct(object):
     def iter_unpack(self, data):
         return (self.names(*d) for d in self.format.iter_unpack(data))
 
+
 class AddressLookup(object):
     """
         Descriptor that wraps get/set actions on pointer fields.
@@ -125,7 +135,7 @@ class AddressLookup(object):
 
     def __init__(self, name):
         # ptr is the suffix given to all pointer fields in compile_fmt
-        self.name = 'ptr_'+name
+        self.name = 'ptr_' + name
         self.value = None
 
     def __set__(self, instance, value):
@@ -143,6 +153,7 @@ class AddressLookup(object):
 
     def __delete__(self, instance):
         raise AttributeError('Attribute cannot be deleted')
+
 
 class BlenderObject(object):
     """
@@ -163,7 +174,7 @@ class BlenderObject(object):
     """
     # Cache for BlenderObject subclasses. Dict of {VERSION: {CLASS_NAME: CLASS}}
     CACHE = {}
-    
+
     # Version of the blend file. Overriden in subclasses.
     VERSION = None
 
@@ -237,11 +248,12 @@ class BlenderObject(object):
         file = self._file()
         if file is None:
             raise RuntimeError('Parent blend file was freed')
-        
+
         return file
 
     def tree(self, recursive=True, max_level=999):
         return self.file.tree(type(self).__name__, recursive, max_level)
+
 
 class BlenderObjectFactory(object):
     """
@@ -276,40 +288,39 @@ class BlenderObjectFactory(object):
         # names cannot start with an underscore
         def fix_name(n):
             if n.startswith("_"):
-                return "f"+n
+                return "f" + n
             else:
                 return n
 
         for f in fields:
             t, count = f.type, str(f.count)
-        
+
             if f.count > 1 and t != 'char':
                 # A unique name must be generated for every item in an array that is not composed of chars
                 # This is translated to a python list when the blender types is instanciated
-                name = (fix_name(f.name+('_{}_{}'.format(i, count))) for i in range(f.count))
+                name = (fix_name(f.name + ('_{}_{}'.format(i, count))) for i in range(f.count))
             else:
                 name = (fix_name(f.name),)
 
             # If type is a pointer
             if f.ptr:
-                fmt_names.extend(('ptr_'+n for n in name))
-                fmt += count+'P'
+                fmt_names.extend(('ptr_' + n for n in name))
+                fmt += count + 'P'
                 continue
 
             # If type is a base type
             if t in base_types:
                 # Strings
                 if t == 'char' and f.count > 1:
-                    t = count+'s'
+                    t = count + 's'
                 else:
-                    t = count+base_types[t]
+                    t = count + base_types[t]
                 fmt_names.extend(name)
                 fmt += t
                 continue
 
             # If type is another structure
-            fmt += (str(f.size)+'x')
-        
+            fmt += (str(f.size) + 'x')
 
         return fmt, fmt_names
 
@@ -323,50 +334,52 @@ class BlenderObjectFactory(object):
         base_types = _BASE_TYPES
         head = file.header
         arch, endian = head[1::]
-        
+
         # Get cache
         version = file.header.version
         version_cache = BlenderObject.CACHE.get(version)
         if version_cache is None:
             version_cache = {}
             BlenderObject.CACHE[version] = version_cache
-        
+
         # Get the name of the struct
         name = file.index.type_names[struct.index]
 
         # If type was cached, use the cached version
-        obj = (version_cache.get(name) or (lambda: None) )()
+        obj = (version_cache.get(name) or (lambda: None))()
         if obj is not None:
             return obj, obj.CLASSES
 
         # If type was not cached, create a new blender object type
         dependencies = []
         offset = 0
-        
+
         # 1. Parse the raw fields data
         name, fields = file._export_struct(struct)
-        
+
         # 2. Extract other blender objects types contained in this object (pointer fields types are ignored)
-        #    The dependency contains the type, a slice to extract the child data from the parent data and the name to be used in the parent object
+        #    The dependency contains the type, a slice to extract the child data from the parent data and the name to be
+        #    used in the parent object
         for f, dna in zip(fields, struct.fields):
             if f.type not in base_types and not f.ptr:
                 tmp_dna = file._struct_lookup(dna.index_type)
-                dep = (BlenderObjectFactory._build_objects(file, tmp_dna)[0], slice(offset, offset+f.size), f.name)
+                dep = (BlenderObjectFactory._build_objects(file, tmp_dna)[0], slice(offset, offset + f.size), f.name)
                 dependencies.append(dep)
 
             offset += f.size
-        
-        # 3. Compile a format string from the extracted fields and build a namedstruct to extract the raw data. See the BlenderObject constructor.
+
+        # 3. Compile a format string from the extracted fields and build a namedstruct to extract the raw data. See the
+        #    BlenderObject constructor.
         fmt, fmt_names = BlenderObjectFactory.compile_fmt(fields)
         fmt_names = namedtuple(name, fmt_names, rename=True)
-        fmt = (endian.value)+fmt.replace('P', arch.value)
+        fmt = endian.value + fmt.replace('P', arch.value)
         fmt = NamedStruct.from_namedtuple(fmt_names, fmt)
-        
+
         # 4. Then build the type itself
-        class_attrs = {'VERSION':version, 'FMT': fmt, 'CLASSES': dependencies}
+        class_attrs = {'VERSION': version, 'FMT': fmt, 'CLASSES': dependencies}
 
         # Add pointer lookup descriptor to the type attributes
-        for f in (f for f in fields if f.ptr): 
+        for f in (f for f in fields if f.ptr):
             class_attrs[f.name] = AddressLookup(f.name)
 
         obj = type(name, (BlenderObject,), class_attrs)
@@ -422,7 +435,7 @@ class BlenderObjectFactory(object):
         file = self._file()
         if file is None:
             raise RuntimeError('Parent blend file was freed')
-        
+
         return file
 
     def find_by_name(self, name):
@@ -457,20 +470,20 @@ class BlenderFile(object):
         author: Gabriel Dube
     """
 
-    Arch   = Enum('Arch', (('X32', 'I'), ('X64', 'Q')), qualname='BlenderFile.Arch')
+    Arch = Enum('Arch', (('X32', 'I'), ('X64', 'Q')), qualname='BlenderFile.Arch')
     Endian = Enum('Endian', (('Little', '<'), ('Big', '>')), qualname='BlenderFile.Endian')
 
     # Version structures
-    VersionInfo   = namedtuple('VersionInfo', ('major', 'minor', 'rev'))
+    VersionInfo = namedtuple('VersionInfo', ('major', 'minor', 'rev'))
     BlendFileInfo = namedtuple('BlendFileInfo', ('version', 'arch', 'endian'))
 
     # Index structures
-    BlendBlockHeader     = namedtuple('BlendBlockHeader', ('code', 'size', 'addr', 'sdna', 'count'))
-    BlendStructFieldDNA  = namedtuple('BlendStructFieldDNA', ('index_type', 'index_name'))
-    BlendStructDNA       = namedtuple('BlendStructDNA', ('index', 'fields'))
-    BlendStructField     = namedtuple('BlendStructField', ('name', 'type', 'size', 'ptr', 'count'))
-    BlendStruct          = namedtuple('BlendStruct', ('name', 'fields'))
-    BlendIndex           = namedtuple('BlendIndex', ('field_names', 'type_names', 'type_sizes', 'structures'))
+    BlendBlockHeader = namedtuple('BlendBlockHeader', ('code', 'size', 'addr', 'sdna', 'count'))
+    BlendStructFieldDNA = namedtuple('BlendStructFieldDNA', ('index_type', 'index_name'))
+    BlendStructDNA = namedtuple('BlendStructDNA', ('index', 'fields'))
+    BlendStructField = namedtuple('BlendStructField', ('name', 'type', 'size', 'ptr', 'count'))
+    BlendStruct = namedtuple('BlendStruct', ('name', 'fields'))
+    BlendIndex = namedtuple('BlendIndex', ('field_names', 'type_names', 'type_sizes', 'structures'))
 
     @staticmethod
     def _parse_header(header):
@@ -487,10 +500,10 @@ class BlenderFile(object):
         """
         if len(header) != 12 or header[0:7] != b'BLENDER':
             return None
-       
+
         arch = header[7:8]
         endian = header[8:9]
-        version = [x-48 for x in header[9::]]
+        version = [x - 48 for x in header[9::]]
 
         if arch == b'-':
             arch = BlenderFile.Arch.X64
@@ -517,7 +530,7 @@ class BlenderFile(object):
 
             author: Gabriel Dube
         """
-        
+
         lookup = (s for s in self.index.structures if s.index == index)
         try:
             return next(lookup)
@@ -538,7 +551,7 @@ class BlenderFile(object):
             If recursive is set to True, the function will also export the composed types of struct
 
             author: Gabriel Dube
-        """        
+        """
         BlendStruct = BlenderFile.BlendStruct
         BlendStructField = BlenderFile.BlendStructField
 
@@ -593,11 +606,11 @@ class BlenderFile(object):
 
             Author: Gabriel Dube
         """
+
         def align():
             nonlocal offset
-            tmp = offset%4
-            offset += 0 if tmp==0 else 4-tmp
-
+            tmp = offset % 4
+            offset += 0 if tmp == 0 else 4 - tmp
 
         Int = NamedStruct('Int', self._fmt_strct('i'), 'val')
         Short = NamedStruct('Short', self._fmt_strct('h'), 'val')
@@ -612,15 +625,15 @@ class BlenderFile(object):
         # Reading the blend file names
         offset = 8
         name_count = Int.unpack_from(data, offset).val
-        field_names = [n.decode('utf-8') for n in data[offset+4::].split(b'\x00', name_count)[:-1]]
+        field_names = [n.decode('utf-8') for n in data[offset + 4::].split(b'\x00', name_count)[:-1]]
 
         # Reading the blend file types
         offset += sum((len(n) for n in field_names))+len(field_names)+4; align()         # Size of all names + size of all null char + name_count offset and Align the offset at 4 bytes
         if data[offset:offset+4] != b'TYPE':
             raise BlenderFileImportException('Malformed index')
 
-        type_count = Int.unpack_from(data, offset+4).val
-        type_names = [n.decode('utf-8') for n in data[offset+8::].split(b'\x00', type_count)[:-1]]
+        type_count = Int.unpack_from(data, offset + 4).val
+        type_names = [n.decode('utf-8') for n in data[offset + 8::].split(b'\x00', type_count)[:-1]]
 
         # Reading the types length
         offset += sum((len(t) for t in type_names))+len(type_names)+8; align()
@@ -629,7 +642,7 @@ class BlenderFile(object):
 
         offset += 4
         type_data_length = Short.format.size * type_count
-        type_sizes = (x.val for x in Short.iter_unpack(data[offset:offset+type_data_length]))
+        type_sizes = (x.val for x in Short.iter_unpack(data[offset:offset + type_data_length]))
 
         # Reading structures information
         offset += type_data_length; align()
@@ -638,17 +651,17 @@ class BlenderFile(object):
 
         offset += 8
         structures = []
-        structure_count = Int.unpack_from(data, offset-4).val
+        structure_count = Int.unpack_from(data, offset - 4).val
         for _ in range(structure_count):
             structure_type_index = Short.unpack_from(data, offset).val
 
-            field_count = Short.unpack_from(data, offset+2).val
+            field_count = Short.unpack_from(data, offset + 2).val
             fields = []
             offset += 4
             for _ in range(field_count):
                 fields.append(BlendStructFieldDNA.unpack_from(data, offset))
                 offset += 4
-            
+
             structures.append(BlendStructDNA(index=structure_type_index, fields=tuple(fields)))
 
         # Rewind the blend at the end of the block head
@@ -660,7 +673,6 @@ class BlenderFile(object):
             type_sizes=tuple(type_sizes),
             structures=tuple(structures)
         )
-
 
     def _parse_blocks(self):
         """
@@ -683,7 +695,7 @@ class BlenderFile(object):
         while end != handle.seek(0, 1) and not end_found:
             buf = handle.read(header_block_size)
             file_block_head = BlendBlockHeader.unpack(buf)
-            
+
             # DNA1 indicates the index block of the blend file
             # ENDB indicates the end of the blend file
             if file_block_head.code == b'DNA1':
@@ -694,13 +706,13 @@ class BlenderFile(object):
                 file_block_heads.append((file_block_head, handle.seek(0, 1)))
 
             handle.seek(file_block_head.size, 1)
-        
+
         if blend_index is None:
             raise BlenderFileImportException('Could not find blend file index')
 
         if end_found == False:
             raise BlenderFileImportException('End of the blend file was not found')
-        
+
         return tuple(file_block_heads), blend_index
 
     def _read_block(self, block, offset):
@@ -712,7 +724,7 @@ class BlenderFile(object):
         handle = self.handle
         handle.seek(offset, 0)
         data = handle.read(block.size)
-        return data 
+        return data
 
     def _from_address(self, ptr):
         """
@@ -721,10 +733,10 @@ class BlenderFile(object):
 
             Author: Gabriel Dube
         """
-        block, offset  = None, None
+        block, offset = None, None
         for _block, _offset in self.blocks:
             if _block.addr == ptr:
-                block, offset  = _block, _offset
+                block, offset = _block, _offset
 
         if offset is None:
             raise BlenderFileReadException('Cannot find the address {} in the blend file'.format(hex(ptr)))
@@ -737,7 +749,7 @@ class BlenderFile(object):
         else:
             ref_self = ref(self)
             step = obj.FMT.format.size
-            return tuple([obj(ref_self, block_data[x:x+step]) for x in range(0, block.size, step) ])
+            return tuple([obj(ref_self, block_data[x:x + step]) for x in range(0, block.size, step)])
 
     def _from_addresses(self, ptr_list):
         return [self._from_address(ptr) if ptr != 0 else None for ptr in ptr_list]
@@ -763,7 +775,8 @@ class BlenderFile(object):
     def list(self, factory_name):
         """
             Creates or get a cached version of a blender type factory. A BlenderObjectFactory
-            offers a pythonic interface to read blend file data of a certain type. For more information see BlenderObjectFactory
+            offers a pythonic interface to read blend file data of a certain type. For more information see
+            BlenderObjectFactory
 
             Arguments:
                 factory_name: Name of the data type to load. Ex: 'Scene'
@@ -774,7 +787,7 @@ class BlenderFile(object):
         factories = BlenderObjectFactory.CACHE.get(version)
 
         # If the factory was already created
-        fact = (factories.get(factory_name) or (lambda:None))()
+        fact = (factories.get(factory_name) or (lambda: None))()
         if fact is not None:
             return fact
 
@@ -792,8 +805,9 @@ class BlenderFile(object):
 
             author: Gabriel Dube
         """
+
         def field_lookup(struct, indent_level=0):
-            indent = '    '*indent_level
+            indent = '    ' * indent_level
             fields = ''
             for ftype, fname in struct.fields:
                 type_name, field_name = type_names[ftype], field_names[fname]
@@ -804,11 +818,10 @@ class BlenderFile(object):
 
             return fields
 
-
         field_names = self.index.field_names
         type_names = self.index.type_names
         struct_indexes = [s.index for s in self.index.structures]
-        
+
         type_index = type_names.index(type_name)
         dna = self._struct_lookup(type_index)
 
