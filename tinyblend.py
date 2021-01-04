@@ -58,7 +58,7 @@ class BlenderFileException(Exception):
     """
         Base exception class for blender import related exceptions
 
-        author: Gabriel Dube
+        Author: Gabriel Dube
     """
 
     def __init__(self, message):
@@ -72,7 +72,7 @@ class BlenderFileImportException(BlenderFileException):
     """
         Exception raised when a blender file import fails.
         
-        author: Gabriel Dube
+        Author: Gabriel Dube
     """
 
     def __init__(self, message):
@@ -82,7 +82,8 @@ class BlenderFileImportException(BlenderFileException):
 class BlenderFileReadException(BlenderFileException):
     """
         Exception raised when reading bad values from a blend file
-        author: Gabriel Dube
+
+        Author: Gabriel Dube
     """
 
     def __init__(self, message):
@@ -170,7 +171,7 @@ class BlenderObject(object):
             This class keeps a weakref to to its parent blend file. If the parent file
             is closed or freed, the pointer lookup will raise a RuntimeError
 
-        author: Gabriel Dube
+        Author: Gabriel Dube
     """
     # Cache for BlenderObject subclasses. Dict of {VERSION: {CLASS_NAME: CLASS}}
     CACHE = {}
@@ -225,7 +226,7 @@ class BlenderObject(object):
         """
             Unpack the base types (float, int, etc) from the raw data to the object
 
-            author: Gabriel Dube
+            Author: Gabriel Dube
         """
         template = re.compile(r'(.+)_\d+_(\d+)')
         gen = zip(names, data)
@@ -267,7 +268,7 @@ class BlenderObjectFactory(object):
         this type is then used to unpack the blender objects from raw data. For more information
         see the BlenderObject documentation.
 
-        author: Gabriel Dube
+        Author: Gabriel Dube
     """
     # Cache for instanced factories. Dict of {VERSION: {CLASS_NAME: CLASS}}
     CACHE = {}
@@ -371,7 +372,7 @@ class BlenderObjectFactory(object):
         """
             Create the blender object for the factory.
 
-            author: Gabriel Dube
+            Author: Gabriel Dube
         """
         base_types = _BASE_TYPES
         head = file.header
@@ -442,7 +443,7 @@ class BlenderObjectFactory(object):
             Find and build an object by name. If the object does not have a name,
             raise a BlenderFileReadException.
 
-            author: Gabriel Dube
+            Author: Gabriel Dube
         """
         if not self.has_name:
             raise BlenderFileReadException('Object type do not have a name')
@@ -466,7 +467,7 @@ class BlenderFile(object):
             * blocks - List of blender data block in the blend file
             * index  - List if all name, types and structures contained in the blend file
     
-        author: Gabriel Dube
+        Author: Gabriel Dube
     """
 
     Arch = Enum('Arch', (('X32', 'I'), ('X64', 'Q')), qualname='BlenderFile.Arch')
@@ -503,12 +504,9 @@ class BlenderFile(object):
             Parse the header of a blender file and return the formatted data in a BlendFileInfo object.
             The passed header must be valid.
 
-            Arguments:
-                header - The header to parse as a byte string
-
-            Return value: A BlendFileInfo object if successful, None otherwise.
-
-            author: Gabriel Dube
+            Author: Gabriel Dube
+            :param header: The header to parse as a byte string
+            :return: A BlendFileInfo object if successful, None otherwise.
         """
         if len(header) != 12 or header[0:7] != b'BLENDER':
             return None
@@ -540,7 +538,7 @@ class BlenderFile(object):
             Lookup for a struct definition in the blender file.
             Raise a BlenderFileReadException if index is not associated with a struct.
 
-            author: Gabriel Dube
+            Author: Gabriel Dube
         """
 
         lookup = (s for s in self.index.structures if s.index == index)
@@ -562,7 +560,7 @@ class BlenderFile(object):
 
             If recursive is set to True, the function will also export the composed types of struct
 
-            author: Gabriel Dube
+            Author: Gabriel Dube
         """
         BlendStruct = BlenderFile.BlendStruct
         BlendStructField = BlenderFile.BlendStructField
@@ -606,6 +604,7 @@ class BlenderFile(object):
     def _fmt_strct(self, fmt):
         """
             Format a Struct format string to match the blender file endianess and pointer sizes.
+
             Author: Gabriel Dube
         """
         head = self.header
@@ -779,10 +778,9 @@ class BlenderFile(object):
             offers a pythonic interface to read blend file data of a certain type. For more information see
             BlenderObjectFactory
 
-            Arguments:
-                factory_name: Name of the data type to load. Ex: 'Scene'
-
-            author: Gabriel Dube
+            Author: Gabriel Dube
+            :param factory_name: Name of the data type to load. Ex: 'Scene'
+            :return:
         """
         version = self.header.version
         factories = BlenderObjectFactory.CACHE.get(version)
@@ -804,7 +802,7 @@ class BlenderFile(object):
         """
             Return a representation of the struct. Useful when looking for attributes in a struct
 
-            author: Gabriel Dube
+            Author: Gabriel Dube
         """
 
         def field_lookup(struct, indent_level=0):
