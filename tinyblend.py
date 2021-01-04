@@ -614,7 +614,7 @@ class BlenderFile(object):
     def _parse_index(self, head):
         """
             Parse the blender index and return the parsed data.
-            The index has an unkown length, so it cannot be parsed in one shot
+            The index has an unknown length, so it cannot be parsed in one shot
 
             Author: Gabriel Dube
         """
@@ -634,12 +634,12 @@ class BlenderFile(object):
         if data[0:8] != b'SDNANAME':
             raise BlenderFileImportException('Malformed index')
 
-        # Reading the blend file names
+        # Reading the blend field names
         offset = 8
         name_count = Int.unpack_from(data, offset).val
         field_names = [n.decode('utf-8') for n in data[offset + 4::].split(b'\x00', name_count)[:-1]]
 
-        # Reading the blend file types
+        # Reading the blend field types
         offset += sum((len(n) for n in field_names)) + len(field_names) + 4
         align()  # Size of all names + size of all null char + name_count offset and Align the offset at 4 bytes
         if data[offset:offset + 4] != b'TYPE':
