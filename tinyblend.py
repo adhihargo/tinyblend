@@ -189,8 +189,8 @@ class BlenderObject(object):
         obj._file = file
 
         # Unpack structures from the raw data to the object
-        for cls_, slice, name in cls.CLASSES:
-            obj_ = cls_(file, data[slice])
+        for cls_, slice_, name in cls.CLASSES:
+            obj_ = cls_(file, data[slice_])
             setattr(obj, name, obj_)
 
         try:
@@ -216,7 +216,7 @@ class BlenderObject(object):
                 eq |= getattr(self, field_name) == getattr(other, field_name)
 
                 # Skip the following names in the array
-                [next(name_iter) for i in range(int(array_len)-1)]
+                [next(name_iter) for _ in range(int(array_len) - 1)]
 
         return eq
 
@@ -808,11 +808,11 @@ class BlenderFile(object):
             indent = '    ' * indent_level
             fields = ''
             for ftype, fname in struct.fields:
-                type_name, field_name = type_names[ftype], field_names[fname]
-                fields += indent+'|-- {} {}'.format(type_name, field_name)+'\n'
+                _type_name, _field_name = type_names[ftype], field_names[fname]
+                fields += indent + '|-- {} {}'.format(_type_name, _field_name) + '\n'
                 if recursive and indent_level < max_level:
-                    if ftype in struct_indexes and not '*' in field_name:
-                        fields += field_lookup(self._struct_lookup(ftype), indent_level+1)
+                    if ftype in struct_indexes and '*' not in _field_name:
+                        fields += field_lookup(self._struct_lookup(ftype), indent_level + 1)
 
             return fields
 
@@ -823,10 +823,10 @@ class BlenderFile(object):
         type_index = type_names.index(type_name)
         dna = self._struct_lookup(type_index)
 
-        repr = '{} ({})\n'.format(type_name, self.header.version)
-        repr += field_lookup(dna)
+        repr_str = '{} ({})\n'.format(type_name, self.header.version)
+        repr_str += field_lookup(dna)
 
-        return repr
+        return repr_str
 
     def list_structures(self):
         names = []
