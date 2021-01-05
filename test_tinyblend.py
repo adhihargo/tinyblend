@@ -4,13 +4,17 @@ Assets loader tests
 
 author: Gabriel Dube
 """
+import gc
 import sys
 from os.path import dirname as dn
+
+import pytest
+
 sys.path.append(dn(dn(__file__)))
 
+from tinyblend import BlenderFile, BlenderObjectFactory, BlenderObject, BlenderFileImportException, \
+    BlenderFileReadException
 
-import pytest, gc
-from tinyblend import BlenderFile, BlenderObjectFactory, BlenderObject, BlenderFileImportException, BlenderFileReadException
 
 def test_open_blend_file():
     blend = BlenderFile('fixtures/test1.blend')
@@ -22,6 +26,7 @@ def test_open_blend_file():
 
     blend.close()
 
+
 def test_open_blend_file_28():
     blend = BlenderFile('fixtures/test_blender28.blend')
 
@@ -31,6 +36,7 @@ def test_open_blend_file_28():
     assert BlenderFile.Endian.Little, head.endian
 
     blend.close()
+
 
 def test_should_read_scene_data():
     blend = BlenderFile('fixtures/test1.blend')
@@ -44,18 +50,19 @@ def test_should_read_scene_data():
     assert isinstance(world, worlds.object)
     assert world.VERSION == blend.header.version
     assert len(world.mtex) == 18
-    assert world.aodist > 12.8999 and world.aodist < 12.90001
-    assert world.id.name[0:11] == b'WOTestWorld'    
+    assert 12.8999 < world.aodist < 12.90001
+    assert world.id.name[0:11] == b'WOTestWorld'
 
     scenes = blend.list('Scene')
     assert len(scenes) == 1, 'Test blend should have one scene'
 
     rctfs = blend.list('rctf')
     pytest.raises(BlenderFileReadException, rctfs.find_by_name, 'blah')  # rctf object do not have a name
-    pytest.raises(BlenderFileReadException, blend.list, 'foos')          # foos is not a valid structure
-    pytest.raises(KeyError, worlds.find_by_name, 'BOO')                  # There are no worlds by the name of BOO in the blend file
+    pytest.raises(BlenderFileReadException, blend.list, 'foos')  # foos is not a valid structure
+    pytest.raises(KeyError, worlds.find_by_name, 'BOO')  # There are no worlds by the name of BOO in the blend file
 
     blend.close()
+
 
 def test_should_read_scene_data_28():
     blend = BlenderFile('fixtures/test_blender28.blend')
@@ -66,7 +73,7 @@ def test_should_read_scene_data_28():
 
     scenes = blend.list('Scene')
     assert len(scenes) == 1, 'Test blend should have one scene'
-    
+
     blend.close()
 
 
@@ -80,6 +87,7 @@ def test_equality():
 
     assert id(world1) is not id(world2)
     assert world1 == world2
+
 
 def test_should_lookup_pointer():
     BlenderObject.CACHE = {}
@@ -103,7 +111,8 @@ def test_should_lookup_pointer():
     assert scene_world is not world
     assert scene.world == world
     assert scene.world is scene_world
-    assert scene.id.next is None         # Null pointer lookup returns None
+    assert scene.id.next is None  # Null pointer lookup returns None
+
 
 def test_should_lookup_pointer_array():
     blend = BlenderFile('fixtures/test1.blend')
@@ -112,6 +121,7 @@ def test_should_lookup_pointer_array():
     data = obj.data
 
     assert data.totvert == len(data.mvert)
+
 
 def test_blend_struct_lookup():
     blend = BlenderFile('fixtures/test1.blend')
@@ -128,10 +138,11 @@ def test_blend_struct_lookup():
 
     blend.close()
 
+
 def test_weakref():
     blend = BlenderFile('fixtures/test1.blend')
     worlds = blend.list('World')
-    
+
     del blend
 
     pytest.raises(RuntimeError, getattr, worlds, 'file')
@@ -139,6 +150,7 @@ def test_weakref():
     pytest.raises(RuntimeError, repr, worlds)
     pytest.raises(RuntimeError, str, worlds)
     pytest.raises(RuntimeError, worlds.find_by_name, '...')
+
 
 def test_cache_lookup():
     blend = BlenderFile('fixtures/test1.blend')
@@ -148,7 +160,7 @@ def test_cache_lookup():
 
     assert BlenderObjectFactory.CACHE[v]['World']() is not None
     assert BlenderObject.CACHE[v]['World']() is not None
-    
+
     del worlds
     gc.collect()
 
@@ -162,17 +174,20 @@ def test_cache_lookup():
 
     blend.close()
 
+
 def test_list_structures():
     blend = BlenderFile('fixtures/test1.blend')
     structs = blend.list_structures()
     assert len(structs) > 30
     assert 'Scene' in structs
 
+
 def test_tree():
     blend = BlenderFile('fixtures/test1.blend')
     scene_repr = blend.tree('Scene')
     assert len(scene_repr.splitlines()) > 100
     assert 'ID' in scene_repr
+
 
 def test_open_bad_blend_file():
     pytest.raises(BlenderFileImportException, BlenderFile, 'fixtures/test2.blend')
