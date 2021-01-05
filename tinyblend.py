@@ -774,28 +774,28 @@ class BlenderFile(object):
     def _get_file_handler(path):
         return open(path, 'rb')
 
-    def list(self, factory_name):
+    def list(self, type_name):
         """
             Creates or get a cached version of a blender type factory. A BlenderObjectFactory
             offers a pythonic interface to read blend file data of a certain type. For more information see
             BlenderObjectFactory
 
             Author: Gabriel Dube
-            :param factory_name: Name of the data type to load. Ex: 'Scene'
+            :param type_name: Name of the data type to load. Ex: 'Scene'
             :return:
         """
         version = self.header.version
         factories: dict = BlenderObjectFactory.CACHE.get(version)
 
         # Check if the factory was already created
-        fact = factories.get(factory_name, type(None))()
+        fact = factories.get(type_name, type(None))()
         if fact is None:
             # Factory creation
             try:
-                fact = BlenderObjectFactory(self, self.index.type_names.index(factory_name))
-                factories[factory_name] = ref(fact)
+                fact = BlenderObjectFactory(self, self.index.type_names.index(type_name))
+                factories[type_name] = ref(fact)
             except ValueError:
-                raise BlenderFileReadException('Data type {} could not be found in the blend file'.format(factory_name))
+                raise BlenderFileReadException('Data type {} could not be found in the blend file'.format(type_name))
         return fact
 
     def tree(self, type_name, recursive=True, max_level=999):
