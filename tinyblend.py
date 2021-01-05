@@ -687,12 +687,15 @@ class BlenderFile(object):
             structures=tuple(structures)
         )
 
-    def _parse_blocks(self) -> ([BlendBlockHeader], BlendIndex):
+    def _parse_blocks(self) -> ([(BlendBlockHeader, int)], BlendIndex):
         """
             Extract the file block headers from the file. 
             Return a list of extracted blocks and the index (aka SDNA) block
 
             Author: Gabriel Dube
+            :return: A tuple consisting of:
+                - List of tuple (block header and its position)
+                - Index of the file's structures
         """
         handle = self.handle
         BlockHeader = NamedStruct.from_namedtuple(BlendBlockHeader, self._fmt_strct('4siPii'))
@@ -704,7 +707,7 @@ class BlenderFile(object):
 
         blend_index = None
         end_found = False
-        block_heads = []
+        block_head_offset_pairs = []
         while end != handle.seek(0, SEEK_CUR) and not end_found:
             buf = handle.read(header_block_size)
             block_head: BlendBlockHeader = BlockHeader.unpack(buf)
@@ -716,7 +719,7 @@ class BlenderFile(object):
             elif block_head.code == b'ENDB':
                 end_found = True
             else:
-                block_heads.append((block_head, handle.seek(0, SEEK_CUR)))
+                block_head_offset_pairs.append((block_head, handle.seek(0, SEEK_CUR)))
 
             handle.seek(block_head.size, SEEK_CUR)
 
@@ -726,7 +729,7 @@ class BlenderFile(object):
         if not end_found:
             raise BlenderFileImportException('End of the blend file was not found')
 
-        return tuple(block_heads), blend_index
+        return tuple(block_head_offset_pairs), blend_index
 
     def _read_block(self, block, offset):
         """
