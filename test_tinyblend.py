@@ -11,9 +11,8 @@ from os.path import dirname as dn
 import pytest
 
 sys.path.append(dn(dn(__file__)))
-
-from tinyblend import BlenderFile, BlenderObjectFactory, BlenderObject, BlenderFileImportException, \
-    BlenderFileReadException
+from tinyblend import BlendFileEndian, BlenderFile, BlendFileArch, BlenderFileReadException, BlenderObjectFactory, \
+    BlenderFileImportException, BlenderObject
 
 
 def test_open_blend_file():
@@ -21,8 +20,8 @@ def test_open_blend_file():
 
     head = blend.header
     assert 'VersionInfo(major=2, minor=7, rev=7)', repr(head.version)
-    assert BlenderFile.Arch.X64, head.arch
-    assert BlenderFile.Endian.Little, head.endian
+    assert BlendFileArch.X64, head.arch
+    assert BlendFileEndian.Little, head.endian
 
     blend.close()
 
@@ -32,8 +31,8 @@ def test_open_blend_file_28():
 
     head = blend.header
     assert 'VersionInfo(major=2, minor=8, rev=0)', repr(head.version)
-    assert BlenderFile.Arch.X64, head.arch
-    assert BlenderFile.Endian.Little, head.endian
+    assert BlendFileArch.X64, head.arch
+    assert BlendFileEndian.Little, head.endian
 
     blend.close()
 

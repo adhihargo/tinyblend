@@ -54,6 +54,21 @@ Author: Gabriel Dube
 _BASE_TYPES = {'float': 'f', 'double': 'd', 'int': 'i', 'short': 'h', 'ushort': "H", 'char': 'c', 'char': 'B',
                'long': 'l', 'ulong': 'L', 'uint64_t': 'Q', 'int64_t': 'q'}
 
+BlendFileArch = Enum('BlendFileArch', (('X32', 'I'), ('X64', 'Q')), qualname='BlendFileArch')
+BlendFileEndian = Enum('BlendFileEndian', (('Little', '<'), ('Big', '>')), qualname='BlendFileEndian')
+
+# Version structures
+BlendVersionInfo = namedtuple('BlendVersionInfo', ('major', 'minor', 'rev'))
+BlendFileHeader = namedtuple('BlendFileInfo', ('version', 'arch', 'endian'))
+
+# Index structures
+BlendBlockHeader = namedtuple('BlendBlockHeader', ('code', 'size', 'addr', 'sdna', 'count'))
+BlendStructFieldDNA = namedtuple('BlendStructFieldDNA', ('index_type', 'index_name'))
+BlendStructDNA = namedtuple('BlendStructDNA', ('index', 'fields'))
+BlendStructField = namedtuple('BlendStructField', ('name', 'type', 'size', 'ptr', 'count'))
+BlendStruct = namedtuple('BlendStruct', ('name', 'fields'))
+BlendIndex = namedtuple('BlendIndex', ('field_names', 'type_names', 'type_sizes', 'structures'))
+
 
 class BlenderFileException(Exception):
     """
@@ -471,21 +486,6 @@ class BlenderFile(object):
         Author: Gabriel Dube
     """
 
-    Arch = Enum('Arch', (('X32', 'I'), ('X64', 'Q')), qualname='BlenderFile.Arch')
-    Endian = Enum('Endian', (('Little', '<'), ('Big', '>')), qualname='BlenderFile.Endian')
-
-    # Version structures
-    VersionInfo = namedtuple('VersionInfo', ('major', 'minor', 'rev'))
-    BlendFileInfo = namedtuple('BlendFileInfo', ('version', 'arch', 'endian'))
-
-    # Index structures
-    BlendBlockHeader = namedtuple('BlendBlockHeader', ('code', 'size', 'addr', 'sdna', 'count'))
-    BlendStructFieldDNA = namedtuple('BlendStructFieldDNA', ('index_type', 'index_name'))
-    BlendStructDNA = namedtuple('BlendStructDNA', ('index', 'fields'))
-    BlendStructField = namedtuple('BlendStructField', ('name', 'type', 'size', 'ptr', 'count'))
-    BlendStruct = namedtuple('BlendStruct', ('name', 'fields'))
-    BlendIndex = namedtuple('BlendIndex', ('field_names', 'type_names', 'type_sizes', 'structures'))
-
     def __init__(self, blend_file_name):
         handle = self._get_file_handler(blend_file_name)
         header = self._parse_header(handle.read(12))
@@ -500,7 +500,7 @@ class BlenderFile(object):
             BlenderObjectFactory.CACHE[header.version] = {}
 
     @staticmethod
-    def _parse_header(header):
+    def _parse_header(header) -> BlendFileHeader:
         """
             Parse the header of a blender file and return the formatted data in a BlendFileInfo object.
             The passed header must be valid.
@@ -517,22 +517,22 @@ class BlenderFile(object):
         version = [x - 48 for x in header[9::]]
 
         if arch == b'-':
-            arch = BlenderFile.Arch.X64
+            arch = BlendFileArch.X64
         elif arch == b'_':
-            arch = BlenderFile.Arch.X32
+            arch = BlendFileArch.X32
         else:
             return None
 
         if endian == b'v':
-            endian = BlenderFile.Endian.Little
+            endian = BlendFileEndian.Little
         elif endian == b'V':
-            endian = BlenderFile.Endian.Big
+            endian = BlendFileEndian.Big
         else:
             return None
 
-        version = BlenderFile.VersionInfo(*version)
+        version = BlendVersionInfo(*version)
 
-        return BlenderFile.BlendFileInfo(version=version, arch=arch, endian=endian)
+        return BlendFileHeader(version=version, arch=arch, endian=endian)
 
     def _struct_lookup(self, index):
         """
@@ -563,14 +563,11 @@ class BlenderFile(object):
 
             Author: Gabriel Dube
         """
-        BlendStruct = BlenderFile.BlendStruct
-        BlendStructField = BlenderFile.BlendStructField
-
         field_names = self.index.field_names
         type_names = self.index.type_names
         type_sizes = self.index.type_sizes
 
-        ptr_size = 8 if self.header.arch == BlenderFile.Arch.X64 else 4
+        ptr_size = 8 if self.header.arch == BlendFileArch.X64 else 4
 
         struct_name = type_names[struct.index]
         struct_fields = []
@@ -611,7 +608,7 @@ class BlenderFile(object):
         head = self.header
         return head.endian.value + (fmt.replace('P', head.arch.value))
 
-    def _parse_index(self, head):
+    def _parse_index(self, head) -> BlendIndex:
         """
             Parse the blender index and return the parsed data.
             The index has an unknown length, so it cannot be parsed in one shot
@@ -626,16 +623,17 @@ class BlenderFile(object):
 
         Int = NamedStruct('Int', self._fmt_strct('i'), 'val')
         Short = NamedStruct('Short', self._fmt_strct('h'), 'val')
-        BlendStructFieldDNA = NamedStruct.from_namedtuple(BlenderFile.BlendStructFieldDNA, self._fmt_strct('hh'))
-        BlendStructDNA = BlenderFile.BlendStructDNA
+        StructFieldDNA = NamedStruct.from_namedtuple(BlendStructFieldDNA, self._fmt_strct('hh'))
+        StructDNA = BlendStructDNA
 
         rewind_offset = self.handle.seek(0, SEEK_CUR)
         data = self.handle.read(head.size)
-        if data[0:8] != b'SDNANAME':
-            raise BlenderFileImportException('Malformed index')
 
         # Reading the blend field names
         offset = 8
+        if data[0:8] != b'SDNANAME':
+            raise BlenderFileImportException('Malformed index')
+
         name_count = Int.unpack_from(data, offset).val
         field_names = [n.decode('utf-8') for n in data[offset + 4::].split(b'\x00', name_count)[:-1]]
 
@@ -674,22 +672,22 @@ class BlenderFile(object):
             fields = []
             offset += 4
             for _ in range(field_count):
-                fields.append(BlendStructFieldDNA.unpack_from(data, offset))
+                fields.append(StructFieldDNA.unpack_from(data, offset))
                 offset += 4
 
-            structures.append(BlendStructDNA(index=structure_type_index, fields=tuple(fields)))
+            structures.append(StructDNA(index=structure_type_index, fields=tuple(fields)))
 
         # Rewind the blend at the end of the block head
         self.handle.seek(rewind_offset, SEEK_SET)
 
-        return BlenderFile.BlendIndex(
+        return BlendIndex(
             field_names=tuple(field_names),
             type_names=tuple(type_names),
             type_sizes=tuple(type_sizes),
             structures=tuple(structures)
         )
 
-    def _parse_blocks(self):
+    def _parse_blocks(self) -> ([BlendBlockHeader], BlendIndex):
         """
             Extract the file block headers from the file. 
             Return a list of extracted blocks and the index (aka SDNA) block
@@ -697,8 +695,8 @@ class BlenderFile(object):
             Author: Gabriel Dube
         """
         handle = self.handle
-        BlendBlockHeader = NamedStruct.from_namedtuple(BlenderFile.BlendBlockHeader, self._fmt_strct('4siPii'))
-        header_block_size = BlendBlockHeader.format.size
+        BlockHeader = NamedStruct.from_namedtuple(BlendBlockHeader, self._fmt_strct('4siPii'))
+        header_block_size = BlockHeader.format.size
 
         # Get the blend file size
         end = handle.seek(0, SEEK_END)
@@ -706,21 +704,21 @@ class BlenderFile(object):
 
         blend_index = None
         end_found = False
-        file_block_heads = []
+        block_heads = []
         while end != handle.seek(0, SEEK_CUR) and not end_found:
             buf = handle.read(header_block_size)
-            file_block_head = BlendBlockHeader.unpack(buf)
+            block_head: BlendBlockHeader = BlockHeader.unpack(buf)
 
             # DNA1 indicates the index block of the blend file
             # ENDB indicates the end of the blend file
-            if file_block_head.code == b'DNA1':
-                blend_index = self._parse_index(file_block_head)
-            elif file_block_head.code == b'ENDB':
+            if block_head.code == b'DNA1':
+                blend_index = self._parse_index(block_head)
+            elif block_head.code == b'ENDB':
                 end_found = True
             else:
-                file_block_heads.append((file_block_head, handle.seek(0, SEEK_CUR)))
+                block_heads.append((block_head, handle.seek(0, SEEK_CUR)))
 
-            handle.seek(file_block_head.size, SEEK_CUR)
+            handle.seek(block_head.size, SEEK_CUR)
 
         if blend_index is None:
             raise BlenderFileImportException('Could not find blend file index')
@@ -728,7 +726,7 @@ class BlenderFile(object):
         if not end_found:
             raise BlenderFileImportException('End of the blend file was not found')
 
-        return tuple(file_block_heads), blend_index
+        return tuple(block_heads), blend_index
 
     def _read_block(self, block, offset):
         """
