@@ -51,7 +51,7 @@ Author: Gabriel Dube
 """
 
 # List of base types found in blend fields and their struct char representation.
-_BASE_TYPES = {'float': 'f', 'double': 'd', 'int': 'i', 'short': 'h', 'ushort': "H", 'char': 'c', 'char': 'B',
+_BASE_TYPES = {'float': 'f', 'double': 'd', 'int': 'i', 'short': 'h', 'ushort': "H", 'char': 'c',
                'long': 'l', 'ulong': 'L', 'uint64_t': 'Q', 'int64_t': 'q'}
 
 BlendFileArch = Enum('BlendFileArch', (('X32', 'I'), ('X64', 'Q')), qualname='BlendFileArch')
@@ -391,7 +391,6 @@ class BlenderObjectFactory(object):
 
             Author: Gabriel Dube
         """
-        base_types = _BASE_TYPES
         head = blend_file.header
         arch, endian = head[1::]
 
@@ -421,9 +420,11 @@ class BlenderObjectFactory(object):
         #    The dependency contains the type, a slice to extract the child data from the parent data and the name to be
         #    used in the parent object
         for f, dna in zip(fields, struct_dna.fields):
-            if f.type not in base_types and not f.ptr:
+            if f.type not in _BASE_TYPES and not f.ptr:
                 tmp_dna = blend_file._struct_lookup(dna.index_type)
-                dep = (BlenderObjectFactory._build_object_type(blend_file, tmp_dna)[0], slice(offset, offset + f.size), f.name)
+                dep = (BlenderObjectFactory._build_object_type(blend_file, tmp_dna)[0],
+                       slice(offset, offset + f.size),
+                       f.name)
                 dependencies.append(dep)
 
             offset += f.size
