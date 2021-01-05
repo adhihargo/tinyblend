@@ -159,12 +159,11 @@ class AddressLookup(object):
         raise AttributeError('Attribute cannot be setted')
 
     def __get__(self, instance, cls):
-        if self.value is None:
-            ptr = getattr(instance, self.name)
-            if type(ptr) is int and ptr != 0:
-                self.value = instance.file._from_address(ptr)
-            elif type(ptr) is tuple:
-                self.value = instance.file._from_addresses(ptr)
+        ptr = getattr(instance, self.name)
+        if type(ptr) is int and ptr != 0:
+            self.value = instance.file._from_address(ptr)
+        elif type(ptr) is tuple:
+            self.value = instance.file._from_addresses(ptr)
 
         return self.value
 
