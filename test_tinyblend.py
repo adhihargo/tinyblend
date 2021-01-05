@@ -46,7 +46,7 @@ def test_should_read_scene_data():
 
     world = worlds.find_by_name('TestWorld')
     assert world.file is blend
-    assert isinstance(world, worlds.object)
+    assert isinstance(world, worlds.object_type)
     assert world.VERSION == blend.header.version
     assert len(world.mtex) == 18
     assert 12.8999 < world.aodist < 12.90001
@@ -106,7 +106,7 @@ def test_should_lookup_pointer():
 
     scene_world = scene.world
 
-    assert type(scene_world) is worlds.object
+    assert type(scene_world) is worlds.object_type
     assert scene_world is not world
     assert scene.world == world
     assert scene.world is scene_world

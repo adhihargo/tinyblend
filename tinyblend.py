@@ -290,7 +290,7 @@ class BlenderObjectFactory(object):
     CACHE = {}
 
     def __init__(self, file, type_name_index):
-        self._file = ref(file)
+        self._file_ref = ref(file)
 
         for index, struct_dna in enumerate(file.index.structures):
             if struct_dna.index == type_name_index:
@@ -304,7 +304,7 @@ class BlenderObjectFactory(object):
         # A type has a name if it has a ID type (always the first parameter)
         self.has_name = 'ID' in (dnatypes[ftype] for ftype, fname in dnafields)
 
-        self.object, _ = BlenderObjectFactory._build_objects(file, self.struct_dna)
+        self.object_type, _ = self._build_object_type(file, self.struct_dna)
         self.object_name = file.index.type_names[self.struct_dna.index]
 
     def __len__(self):
@@ -327,10 +327,11 @@ class BlenderObjectFactory(object):
         file = self.file
         blocks = file.blocks
 
+        block: BlendBlockHeader
         for block, offset in blocks:
             if block.sdna == self.sdna_index:
                 data = file._read_block(block, offset)
-                yield self.object(self._file, data)
+                yield self.object_type(self._file_ref, data)
 
     @staticmethod
     def compile_fmt(fields):
@@ -384,45 +385,45 @@ class BlenderObjectFactory(object):
         return fmt, fmt_names
 
     @staticmethod
-    def _build_objects(file, struct):
+    def _build_object_type(blend_file, struct_dna):
         """
-            Create the blender object for the factory.
+            Dynamically create Python object type from Blender file SDNA for the factory.
 
             Author: Gabriel Dube
         """
         base_types = _BASE_TYPES
-        head = file.header
+        head = blend_file.header
         arch, endian = head[1::]
 
         # Get cache
-        version = file.header.version
+        version = blend_file.header.version
         version_cache = BlenderObject.CACHE.get(version)
         if version_cache is None:
             version_cache = {}
             BlenderObject.CACHE[version] = version_cache
 
         # Get the name of the struct
-        name = file.index.type_names[struct.index]
+        name = blend_file.index.type_names[struct_dna.index]
 
         # If type was cached, use the cached version
-        obj = (version_cache.get(name) or (lambda: None))()
-        if obj is not None:
-            return obj, obj.CLASSES
+        object_type = version_cache.get(name, type(None))()
+        if object_type is not None:
+            return object_type, object_type.CLASSES
 
         # If type was not cached, create a new blender object type
         dependencies = []
         offset = 0
 
         # 1. Parse the raw fields data
-        name, fields = file._export_struct(struct)
+        name, fields = blend_file._export_struct(struct_dna)
 
         # 2. Extract other blender objects types contained in this object (pointer fields types are ignored)
         #    The dependency contains the type, a slice to extract the child data from the parent data and the name to be
         #    used in the parent object
-        for f, dna in zip(fields, struct.fields):
+        for f, dna in zip(fields, struct_dna.fields):
             if f.type not in base_types and not f.ptr:
-                tmp_dna = file._struct_lookup(dna.index_type)
-                dep = (BlenderObjectFactory._build_objects(file, tmp_dna)[0], slice(offset, offset + f.size), f.name)
+                tmp_dna = blend_file._struct_lookup(dna.index_type)
+                dep = (BlenderObjectFactory._build_object_type(blend_file, tmp_dna)[0], slice(offset, offset + f.size), f.name)
                 dependencies.append(dep)
 
             offset += f.size
@@ -441,14 +442,14 @@ class BlenderObjectFactory(object):
         for f in (f for f in fields if f.ptr):
             class_attrs[f.name] = AddressLookup(f.name)
 
-        obj = type(name, (BlenderObject,), class_attrs)
-        version_cache[name] = ref(obj)
+        object_type = type(name, (BlenderObject,), class_attrs)
+        version_cache[name] = ref(object_type)
 
-        return obj, tuple(dependencies)
+        return object_type, tuple(dependencies)
 
     @property
     def file(self):
-        file = self._file()
+        file: BlenderFile = self._file_ref()
         if file is None:
             raise RuntimeError('Parent blend file was freed')
 
@@ -757,9 +758,9 @@ class BlenderFile(object):
         if offset is None:
             raise BlenderFileReadException('Cannot find the address {} in the blend file'.format(hex(ptr)))
 
-        struct = self.index.structures[block.sdna]
+        struct_dna = self.index.structures[block.sdna]
         block_data = self._read_block(block, offset)
-        obj, _ = BlenderObjectFactory._build_objects(self, struct)
+        obj, _ = BlenderObjectFactory._build_object_type(self, struct_dna)
         if block.count == 1:
             return obj(ref(self), block_data)
         else:
